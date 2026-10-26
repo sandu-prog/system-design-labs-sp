@@ -227,637 +227,238 @@ Note over U,S: Citirile urmatoare reflecta modificarea salvata
 
 ## 2. Student Skill Exchange
 
-**Statut:** Proiect alternativ, supus acceptarii profesorului  
-**Tinta de capacitate din Laboratorul 2:** 5.016 RPS la varf, pentru 30.000 utilizatori simultani (estimare, nu masuratoare).
+**Statut:** Proiect alternativ, supus acceptarii profesorului.  
+**Tinta de capacitate din Laboratorul 2:** 5.016 RPS la varf, pentru 30.000 de utilizatori simultani (estimare de proiectare).
 
 **Decizie arhitecturala:** Profilurile canonice sunt separate de indexul de cautare. Operatiile private sunt autorizate si confirmate numai dupa commit.
 
 ### 2.1. System Context
 
-Studentul si moderatorul interactioneaza cu sistemul Student Skill Exchange.
+Studentul si moderatorul interactioneaza cu Student Skill Exchange.
 
 ```mermaid
 graph LR
-A[Student] --> C[Student Skill Exchange]
-B[Moderator] --> C
-C --> A
-C --> B
-
-A2. 2. Container
-graph LR
-S[Student]
-M[Moderator]
-subgraph Exchange
-W[Web Application]
-A[Skill Exchange Application]
-D[Exchange Data Store]
-I[Skill Search Index]
-J[Search Index Worker]
-end
-S --> W
-M --> W
-W --> A
-A --> D
-A --> I
-A --> J
-J --> I
-
-A3. 3. Component
-graph LR
-W[Web Application]
-D[Exchange Data Store]
-I[Skill Search Index]
-J[Search Index Worker]
-subgraph Skill_Exchange_Application
-Auth[IdentityService]
-Profile[StudentProfileService]
-Search[SkillSearchService]
-Request[ExchangeRequestService]
-Report[ModerationService]
-end
-W --> Profile
-W --> Search
-W --> Request
-W --> Report
-Profile --> Auth
-Search --> Auth
-Request --> Auth
-Report --> Auth
-Auth --> D
-Profile --> D
-Request --> D
-Report --> D
-Search --> I
-Profile --> J
-
-A4. 4.A. Flux de secvență — sincronizare / publicare
-sequenceDiagram
-actor S as Student
-participant W as Web Application
-participant P as StudentProfileService
-participant A as IdentityService
-participant D as Exchange Data Store
-participant J as Search Index Worker
-participant I as Skill Search Index
-S->>W: Modifica abilitatile
-W->>P: Salveaza profilul
-P->>A: Verifica sesiunea
-alt Sesiune invalida
-A-->>P: Acces refuzat
-P-->>W: Eroare 401
-W-->>S: Autentificare necesara
-else Sesiune valida
-A-->>P: Student ID
-P->>P: Valideaza datele
-alt Date invalide
-P-->>W: Eroare 400
-W-->>S: Corecteaza datele
-else Date valide
-P->>D: Salveaza profilul si evenimentul
-alt Eroare la salvare
-D-->>P: Rollback
-P-->>W: Eroare 503
-W-->>S: Modificare neconfirmata
-else Salvare reusita
-D-->>P: Confirmare
-P-->>W: Profil actualizat
-W-->>S: Salvare confirmata
-J->>D: Citeste evenimentul
-J->>I: Actualizeaza indexul
-alt Indexare reusita
-I-->>J: Confirmare
-else Index indisponibil
-I-->>J: Eroare
-J->>J: Reincearca indexarea
-end
-end
-end
-end
-
-A5. 4.B. Flux de secvență — citire / căutare
-sequenceDiagram
-actor S as Student
-participant W as Web Application
-participant Q as SkillSearchService
-participant A as IdentityService
-participant I as Skill Search Index
-participant D as Exchange Data Store
-S->>W: Cauta Python si disponibilitate
-W->>Q: Trimite filtrele
-Q->>A: Verifica identitatea
-alt Sesiune invalida
-A-->>Q: Neautentificat
-Q-->>W: Eroare 401
-W-->>S: Autentificare necesara
-else Sesiune valida
-A-->>Q: Student ID
-Q->>Q: Valideaza filtrele
-alt Filtre invalide
-Q-->>W: Eroare 400
-W-->>S: Filtre invalide
-else Filtre valide
-Q->>I: Cauta profiluri relevante
-alt Index indisponibil
-I-->>Q: Eroare
-Q-->>W: Eroare 503
-W-->>S: Cautare indisponibila
-else Index intarziat
-I-->>Q: Rezultate si intarziere
-Q-->>W: Rezultate posibil invechite
-W-->>S: Afiseaza avertisment
-else Index actualizat
-I-->>Q: ID profiluri
-Q->>D: Citeste profilurile
-alt Stocare indisponibila
-D-->>Q: Eroare
-Q-->>W: Eroare 503
-W-->>S: Rezultate indisponibile
-else Citire reusita
-D-->>Q: Profiluri vizibile
-Q-->>W: Rezultate filtrate
-W-->>S: Afiseaza partenerii
-end
-end
-end
-end
+    A[Student] --> C[Student Skill Exchange]
+    B[Moderator] --> C
+    C --> A
+    C --> B
 ```
 
 ### 2.2. Container
 
-Web Application comunica cu Skill Exchange Application, care foloseste Exchange Data Store si Skill Search Index; Search Index Worker actualizeaza indexul asincron.
+Web Application trimite cererile catre Skill Exchange Application. Datele sunt salvate in Exchange Data Store, iar Search Index Worker actualizeaza asincron Skill Search Index.
 
 ```mermaid
 graph LR
-S[Student]
-M[Moderator]
-subgraph Exchange
-W[Web Application]
-A[Skill Exchange Application]
-D[Exchange Data Store]
-I[Skill Search Index]
-J[Search Index Worker]
-end
-S --> W
-M --> W
-W --> A
-A --> D
-A --> I
-A --> J
-J --> I
-
-A3. 3. Component
-graph LR
-W[Web Application]
-D[Exchange Data Store]
-I[Skill Search Index]
-J[Search Index Worker]
-subgraph Skill_Exchange_Application
-Auth[IdentityService]
-Profile[StudentProfileService]
-Search[SkillSearchService]
-Request[ExchangeRequestService]
-Report[ModerationService]
-end
-W --> Profile
-W --> Search
-W --> Request
-W --> Report
-Profile --> Auth
-Search --> Auth
-Request --> Auth
-Report --> Auth
-Auth --> D
-Profile --> D
-Request --> D
-Report --> D
-Search --> I
-Profile --> J
-
-A4. 4.A. Flux de secvență — sincronizare / publicare
-sequenceDiagram
-actor S as Student
-participant W as Web Application
-participant P as StudentProfileService
-participant A as IdentityService
-participant D as Exchange Data Store
-participant J as Search Index Worker
-participant I as Skill Search Index
-S->>W: Modifica abilitatile
-W->>P: Salveaza profilul
-P->>A: Verifica sesiunea
-alt Sesiune invalida
-A-->>P: Acces refuzat
-P-->>W: Eroare 401
-W-->>S: Autentificare necesara
-else Sesiune valida
-A-->>P: Student ID
-P->>P: Valideaza datele
-alt Date invalide
-P-->>W: Eroare 400
-W-->>S: Corecteaza datele
-else Date valide
-P->>D: Salveaza profilul si evenimentul
-alt Eroare la salvare
-D-->>P: Rollback
-P-->>W: Eroare 503
-W-->>S: Modificare neconfirmata
-else Salvare reusita
-D-->>P: Confirmare
-P-->>W: Profil actualizat
-W-->>S: Salvare confirmata
-J->>D: Citeste evenimentul
-J->>I: Actualizeaza indexul
-alt Indexare reusita
-I-->>J: Confirmare
-else Index indisponibil
-I-->>J: Eroare
-J->>J: Reincearca indexarea
-end
-end
-end
-end
-
-A5. 4.B. Flux de secvență — citire / căutare
-sequenceDiagram
-actor S as Student
-participant W as Web Application
-participant Q as SkillSearchService
-participant A as IdentityService
-participant I as Skill Search Index
-participant D as Exchange Data Store
-S->>W: Cauta Python si disponibilitate
-W->>Q: Trimite filtrele
-Q->>A: Verifica identitatea
-alt Sesiune invalida
-A-->>Q: Neautentificat
-Q-->>W: Eroare 401
-W-->>S: Autentificare necesara
-else Sesiune valida
-A-->>Q: Student ID
-Q->>Q: Valideaza filtrele
-alt Filtre invalide
-Q-->>W: Eroare 400
-W-->>S: Filtre invalide
-else Filtre valide
-Q->>I: Cauta profiluri relevante
-alt Index indisponibil
-I-->>Q: Eroare
-Q-->>W: Eroare 503
-W-->>S: Cautare indisponibila
-else Index intarziat
-I-->>Q: Rezultate si intarziere
-Q-->>W: Rezultate posibil invechite
-W-->>S: Afiseaza avertisment
-else Index actualizat
-I-->>Q: ID profiluri
-Q->>D: Citeste profilurile
-alt Stocare indisponibila
-D-->>Q: Eroare
-Q-->>W: Eroare 503
-W-->>S: Rezultate indisponibile
-else Citire reusita
-D-->>Q: Profiluri vizibile
-Q-->>W: Rezultate filtrate
-W-->>S: Afiseaza partenerii
-end
-end
-end
-end
+    S[Student]
+    M[Moderator]
+    subgraph Exchange
+        W[Web Application]
+        A[Skill Exchange Application]
+        D[Exchange Data Store]
+        I[Skill Search Index]
+        J[Search Index Worker]
+    end
+    S --> W
+    M --> W
+    W --> A
+    A --> D
+    A --> I
+    A --> J
+    J --> I
 ```
 
 ### 2.3. Component
 
-Descompune aplicatia in IdentityService, StudentProfileService, SkillSearchService, ExchangeRequestService si ModerationService.
+Skill Exchange Application contine IdentityService, StudentProfileService, SkillSearchService, ExchangeRequestService si ModerationService.
 
 ```mermaid
 graph LR
-W[Web Application]
-D[Exchange Data Store]
-I[Skill Search Index]
-J[Search Index Worker]
-subgraph Skill_Exchange_Application
-Auth[IdentityService]
-Profile[StudentProfileService]
-Search[SkillSearchService]
-Request[ExchangeRequestService]
-Report[ModerationService]
-end
-W --> Profile
-W --> Search
-W --> Request
-W --> Report
-Profile --> Auth
-Search --> Auth
-Request --> Auth
-Report --> Auth
-Auth --> D
-Profile --> D
-Request --> D
-Report --> D
-Search --> I
-Profile --> J
-
-A4. 4.A. Flux de secvență — sincronizare / publicare
-sequenceDiagram
-actor S as Student
-participant W as Web Application
-participant P as StudentProfileService
-participant A as IdentityService
-participant D as Exchange Data Store
-participant J as Search Index Worker
-participant I as Skill Search Index
-S->>W: Modifica abilitatile
-W->>P: Salveaza profilul
-P->>A: Verifica sesiunea
-alt Sesiune invalida
-A-->>P: Acces refuzat
-P-->>W: Eroare 401
-W-->>S: Autentificare necesara
-else Sesiune valida
-A-->>P: Student ID
-P->>P: Valideaza datele
-alt Date invalide
-P-->>W: Eroare 400
-W-->>S: Corecteaza datele
-else Date valide
-P->>D: Salveaza profilul si evenimentul
-alt Eroare la salvare
-D-->>P: Rollback
-P-->>W: Eroare 503
-W-->>S: Modificare neconfirmata
-else Salvare reusita
-D-->>P: Confirmare
-P-->>W: Profil actualizat
-W-->>S: Salvare confirmata
-J->>D: Citeste evenimentul
-J->>I: Actualizeaza indexul
-alt Indexare reusita
-I-->>J: Confirmare
-else Index indisponibil
-I-->>J: Eroare
-J->>J: Reincearca indexarea
-end
-end
-end
-end
-
-A5. 4.B. Flux de secvență — citire / căutare
-sequenceDiagram
-actor S as Student
-participant W as Web Application
-participant Q as SkillSearchService
-participant A as IdentityService
-participant I as Skill Search Index
-participant D as Exchange Data Store
-S->>W: Cauta Python si disponibilitate
-W->>Q: Trimite filtrele
-Q->>A: Verifica identitatea
-alt Sesiune invalida
-A-->>Q: Neautentificat
-Q-->>W: Eroare 401
-W-->>S: Autentificare necesara
-else Sesiune valida
-A-->>Q: Student ID
-Q->>Q: Valideaza filtrele
-alt Filtre invalide
-Q-->>W: Eroare 400
-W-->>S: Filtre invalide
-else Filtre valide
-Q->>I: Cauta profiluri relevante
-alt Index indisponibil
-I-->>Q: Eroare
-Q-->>W: Eroare 503
-W-->>S: Cautare indisponibila
-else Index intarziat
-I-->>Q: Rezultate si intarziere
-Q-->>W: Rezultate posibil invechite
-W-->>S: Afiseaza avertisment
-else Index actualizat
-I-->>Q: ID profiluri
-Q->>D: Citeste profilurile
-alt Stocare indisponibila
-D-->>Q: Eroare
-Q-->>W: Eroare 503
-W-->>S: Rezultate indisponibile
-else Citire reusita
-D-->>Q: Profiluri vizibile
-Q-->>W: Rezultate filtrate
-W-->>S: Afiseaza partenerii
-end
-end
-end
-end
+    W[Web Application]
+    D[Exchange Data Store]
+    I[Skill Search Index]
+    J[Search Index Worker]
+    subgraph Skill_Exchange_Application
+        Auth[IdentityService]
+        Profile[StudentProfileService]
+        Search[SkillSearchService]
+        Request[ExchangeRequestService]
+        Report[ModerationService]
+    end
+    W --> Profile
+    W --> Search
+    W --> Request
+    W --> Report
+    Profile --> Auth
+    Search --> Auth
+    Request --> Auth
+    Report --> Auth
+    Auth --> D
+    Profile --> D
+    Request --> D
+    Report --> D
+    Search --> I
+    Profile --> J
 ```
 
 ### 2.4. Secventa A - Sincronizare si publicare
 
-Actualizarea profilului se salveaza in baza canonica impreuna cu evenimentul pentru indexare. Worker-ul actualizeaza ulterior indexul; sunt tratate erorile.
+Actualizarea profilului se salveaza atomic impreuna cu evenimentul pentru indexare. Indexarea ulterioara poate intarzia si poate fi reincercata.
 
 ```mermaid
 sequenceDiagram
-actor S as Student
-participant W as Web Application
-participant P as StudentProfileService
-participant A as IdentityService
-participant D as Exchange Data Store
-participant J as Search Index Worker
-participant I as Skill Search Index
-S->>W: Modifica abilitatile
-W->>P: Salveaza profilul
-P->>A: Verifica sesiunea
-alt Sesiune invalida
-A-->>P: Acces refuzat
-P-->>W: Eroare 401
-W-->>S: Autentificare necesara
-else Sesiune valida
-A-->>P: Student ID
-P->>P: Valideaza datele
-alt Date invalide
-P-->>W: Eroare 400
-W-->>S: Corecteaza datele
-else Date valide
-P->>D: Salveaza profilul si evenimentul
-alt Eroare la salvare
-D-->>P: Rollback
-P-->>W: Eroare 503
-W-->>S: Modificare neconfirmata
-else Salvare reusita
-D-->>P: Confirmare
-P-->>W: Profil actualizat
-W-->>S: Salvare confirmata
-J->>D: Citeste evenimentul
-J->>I: Actualizeaza indexul
-alt Indexare reusita
-I-->>J: Confirmare
-else Index indisponibil
-I-->>J: Eroare
-J->>J: Reincearca indexarea
-end
-end
-end
-end
-
-A5. 4.B. Flux de secvență — citire / căutare
-sequenceDiagram
-actor S as Student
-participant W as Web Application
-participant Q as SkillSearchService
-participant A as IdentityService
-participant I as Skill Search Index
-participant D as Exchange Data Store
-S->>W: Cauta Python si disponibilitate
-W->>Q: Trimite filtrele
-Q->>A: Verifica identitatea
-alt Sesiune invalida
-A-->>Q: Neautentificat
-Q-->>W: Eroare 401
-W-->>S: Autentificare necesara
-else Sesiune valida
-A-->>Q: Student ID
-Q->>Q: Valideaza filtrele
-alt Filtre invalide
-Q-->>W: Eroare 400
-W-->>S: Filtre invalide
-else Filtre valide
-Q->>I: Cauta profiluri relevante
-alt Index indisponibil
-I-->>Q: Eroare
-Q-->>W: Eroare 503
-W-->>S: Cautare indisponibila
-else Index intarziat
-I-->>Q: Rezultate si intarziere
-Q-->>W: Rezultate posibil invechite
-W-->>S: Afiseaza avertisment
-else Index actualizat
-I-->>Q: ID profiluri
-Q->>D: Citeste profilurile
-alt Stocare indisponibila
-D-->>Q: Eroare
-Q-->>W: Eroare 503
-W-->>S: Rezultate indisponibile
-else Citire reusita
-D-->>Q: Profiluri vizibile
-Q-->>W: Rezultate filtrate
-W-->>S: Afiseaza partenerii
-end
-end
-end
-end
+    actor S as Student
+    participant W as Web Application
+    participant P as StudentProfileService
+    participant A as IdentityService
+    participant D as Exchange Data Store
+    participant J as Search Index Worker
+    participant I as Skill Search Index
+    S->>W: Modifica abilitatile
+    W->>P: Salveaza profilul
+    P->>A: Verifica sesiunea
+    alt Sesiune invalida
+        A-->>P: Acces refuzat
+        P-->>W: Eroare 401
+        W-->>S: Autentificare necesara
+    else Sesiune valida
+        A-->>P: Student ID
+        P->>P: Valideaza datele
+        alt Date invalide
+            P-->>W: Eroare 400
+            W-->>S: Corecteaza datele
+        else Date valide
+            P->>D: Salveaza profilul si evenimentul
+            alt Eroare la salvare
+                D-->>P: Rollback
+                P-->>W: Eroare 503
+                W-->>S: Modificare neconfirmata
+            else Salvare reusita
+                D-->>P: Confirmare commit
+                P-->>W: Profil actualizat
+                W-->>S: Salvare confirmata
+                J->>D: Citeste evenimentul
+                J->>I: Actualizeaza indexul
+                alt Indexare reusita
+                    I-->>J: Confirmare
+                else Index indisponibil
+                    I-->>J: Eroare
+                    J->>J: Reincearca indexarea
+                end
+            end
+        end
+    end
 ```
 
 ### 2.5. Secventa B - Citire si cautare
 
-Cautarea verifica sesiunea si filtrele, foloseste indexul si citeste profilurile din baza canonica. Sunt tratate intarzierile si indisponibilitatea.
+Studentul cauta parteneri folosind filtre validate. Sistemul verifica autentificarea, disponibilitatea indexului si accesul la profiluri.
 
 ```mermaid
 sequenceDiagram
-actor S as Student
-participant W as Web Application
-participant Q as SkillSearchService
-participant A as IdentityService
-participant I as Skill Search Index
-participant D as Exchange Data Store
-S->>W: Cauta Python si disponibilitate
-W->>Q: Trimite filtrele
-Q->>A: Verifica identitatea
-alt Sesiune invalida
-A-->>Q: Neautentificat
-Q-->>W: Eroare 401
-W-->>S: Autentificare necesara
-else Sesiune valida
-A-->>Q: Student ID
-Q->>Q: Valideaza filtrele
-alt Filtre invalide
-Q-->>W: Eroare 400
-W-->>S: Filtre invalide
-else Filtre valide
-Q->>I: Cauta profiluri relevante
-alt Index indisponibil
-I-->>Q: Eroare
-Q-->>W: Eroare 503
-W-->>S: Cautare indisponibila
-else Index intarziat
-I-->>Q: Rezultate si intarziere
-Q-->>W: Rezultate posibil invechite
-W-->>S: Afiseaza avertisment
-else Index actualizat
-I-->>Q: ID profiluri
-Q->>D: Citeste profilurile
-alt Stocare indisponibila
-D-->>Q: Eroare
-Q-->>W: Eroare 503
-W-->>S: Rezultate indisponibile
-else Citire reusita
-D-->>Q: Profiluri vizibile
-Q-->>W: Rezultate filtrate
-W-->>S: Afiseaza partenerii
-end
-end
-end
-end
+    actor S as Student
+    participant W as Web Application
+    participant Q as SkillSearchService
+    participant A as IdentityService
+    participant I as Skill Search Index
+    participant D as Exchange Data Store
+    S->>W: Cauta Python si disponibilitate
+    W->>Q: Trimite filtrele
+    Q->>A: Verifica identitatea
+    alt Sesiune invalida
+        A-->>Q: Neautentificat
+        Q-->>W: Eroare 401
+        W-->>S: Autentificare necesara
+    else Sesiune valida
+        A-->>Q: Student ID
+        Q->>Q: Valideaza filtrele
+        alt Filtre invalide
+            Q-->>W: Eroare 400
+            W-->>S: Filtre invalide
+        else Filtre valide
+            Q->>I: Cauta profiluri relevante
+            alt Index indisponibil
+                I-->>Q: Eroare
+                Q-->>W: Eroare 503
+                W-->>S: Cautare indisponibila
+            else Index intarziat
+                I-->>Q: Rezultate posibil invechite
+                Q-->>W: Rezultate si avertisment
+                W-->>S: Afiseaza avertisment
+            else Index actualizat
+                I-->>Q: ID profiluri
+                Q->>D: Citeste profilurile
+                alt Stocare indisponibila
+                    D-->>Q: Eroare
+                    Q-->>W: Eroare 503
+                    W-->>S: Rezultate indisponibile
+                else Citire reusita
+                    D-->>Q: Profiluri vizibile
+                    Q-->>W: Rezultate filtrate
+                    W-->>S: Afiseaza partenerii
+                end
+            end
+        end
+    end
 ```
 
 ### 2.6. Secventa C - Modificare privata
 
-Acceptarea unei cereri verifica identitatea destinatarului si starea pending. Sunt tratate erorile 401, 400, 403, 409 si 503; confirmarea urmeaza commitului.
+Acceptarea unei cereri necesita sesiune valida, destinatar corect si stare pending. Succesul este confirmat numai dupa commit.
 
 ```mermaid
 sequenceDiagram
-actor S as Student
-participant W as Web Application
-participant R as ExchangeRequestService
-participant A as IdentityService
-participant D as Exchange Data Store
-S->>W: Accepta cererea primita
-W->>R: Accept requestId
-R->>A: Verifica sesiunea
-alt Sesiune invalida
-A-->>R: Neautentificat
-R-->>W: Eroare 401
-W-->>S: Autentificare necesara
-else Sesiune valida
-A-->>R: Student ID
-R->>R: Valideaza cererea
-alt Date invalide
-R-->>W: Eroare 400
-W-->>S: Cerere invalida
-else Date valide
-R->>D: Verifica destinatarul si starea
-alt Studentul nu este destinatarul
-D-->>R: Acces interzis
-R-->>W: Eroare 403
-W-->>S: Acces refuzat
-else Cererea nu este pending
-D-->>R: Conflict de stare
-R-->>W: Eroare 409
-W-->>S: Cerere deja procesata
-else Stocare indisponibila
-D-->>R: Eroare
-R-->>W: Eroare 503
-W-->>S: Rezultat neconfirmat
-else Cerere eligibila
-D-->>R: Operatie permisa
-R->>D: Actualizeaza statusul la accepted
-alt Commit esuat
-D-->>R: Rollback
-R-->>W: Eroare la salvare
-W-->>S: Verifica starea inainte de retry
-else Commit confirmat
-D-->>R: Salvare confirmata
-R-->>W: Status 200 accepted
-W-->>S: Cerere acceptata
-end
-end
-end
-end
+    actor S as Student
+    participant W as Web Application
+    participant R as ExchangeRequestService
+    participant A as IdentityService
+    participant D as Exchange Data Store
+    S->>W: Accepta cererea primita
+    W->>R: Accept requestId
+    R->>A: Verifica sesiunea
+    alt Sesiune invalida
+        A-->>R: Neautentificat
+        R-->>W: Eroare 401
+        W-->>S: Autentificare necesara
+    else Sesiune valida
+        A-->>R: Student ID
+        R->>R: Valideaza cererea
+        alt Date invalide
+            R-->>W: Eroare 400
+            W-->>S: Cerere invalida
+        else Date valide
+            R->>D: Verifica destinatarul si starea
+            alt Studentul nu este destinatarul
+                D-->>R: Acces interzis
+                R-->>W: Eroare 403
+                W-->>S: Acces refuzat
+            else Cererea nu este pending
+                D-->>R: Conflict de stare
+                R-->>W: Eroare 409
+                W-->>S: Cerere deja procesata
+            else Stocare indisponibila
+                D-->>R: Eroare
+                R-->>W: Eroare 503
+                W-->>S: Rezultat neconfirmat
+            else Cerere eligibila
+                D-->>R: Operatie permisa
+                R->>D: Actualizeaza statusul la accepted
+                alt Commit esuat
+                    D-->>R: Rollback
+                    R-->>W: Eroare la salvare
+                    W-->>S: Verifica starea inainte de retry
+                else Commit confirmat
+                    D-->>R: Salvare confirmata
+                    R-->>W: Status 200 accepted
+                    W-->>S: Cerere acceptata
+                end
+            end
+        end
+    end
 ```
 
 ---
 
 ## Concluzie
 
-Arhitecturile delimiteaza sistemele si responsabilitatile interne, iar diagramele de secventa documenteaza validarea, autorizarea, erorile si confirmarea operatiilor dupa salvare.
-
-**Nota de consistenta:** Pragul de invechire a pretului in diagrama de citire pentru Personal Investment Dashboard a fost uniformizat la **15 minute**, conform Laboratorului 2; documentul Word initial mentiona 20 de minute.
-
-**Prezentare:** Codul Mermaid este inclus direct in README.md, fara capturi de ecran ale diagramelor. Pentru cercetarea solicitata in alte laboratoare, dovezile trebuie furnizate separat, conform regulilor cursului.
+Ambele proiecte separa responsabilitatile intre interfata, logica de aplicatie si stocare. Diagramele de secventa descriu atat traseele reusite, cat si validarea intrarilor, autorizarea si comportamentul in caz de eroare.
